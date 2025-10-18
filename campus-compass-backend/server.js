@@ -6,7 +6,7 @@ import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
 
 // ============ CONFIGURATION ============
-const MONGODB_URI = process.env.MONGODB_URI || "your-mongodb-uri-here";
+const MONGODB_URI = process.env.MONGODB_URI || "mongodb+srv://campus_admin:Cj3oFdkY1jjZUsG7@cluster0.tayggd6.mongodb.net/campus-compass?retryWrites=true&w=majorityappName=Cluster0";
 const JWT_SECRET = process.env.JWT_SECRET || "your-jwt-secret-here";
 const PORT = process.env.PORT || 5000;
 const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:5173";
