@@ -1,4 +1,6 @@
-import React, { useState } from 'react';
+import axios from 'axios';
+import { useState, useEffect } from 'react';
+
 import { MapPin, Plus, Star, Award, Filter, Search, Navigation, Coffee, Zap, Users, Heart, Book, TrendingUp, X, Check } from 'lucide-react';
 
 const App = () => {
