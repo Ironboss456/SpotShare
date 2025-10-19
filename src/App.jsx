@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { MapPin, Plus, Star, Award, Filter, Search, Navigation, Coffee, Zap, Users, Heart, Book, TrendingUp, X, Check } from 'lucide-react';
+import { MapPin, Plus, Star, Award, Filter, Search, Coffee, Zap, Users, Heart, Book, TrendingUp, X, Check } from 'lucide-react';
+import RealMap from './components/RealMap';
 
 const App = () => {
   const [view, setView] = useState('map');
@@ -25,7 +26,7 @@ const App = () => {
       id: 1,
       name: 'Suzzallo Library Reading Room',
       category: 'study',
-      location: { x: 45, y: 35 },
+      location: { lat: 47.6564, lng: -122.3086 },
       rating: 4.8,
       verified: true,
       features: ['Quiet', 'WiFi', 'Beautiful Architecture', 'Open Late'],
@@ -39,7 +40,7 @@ const App = () => {
       id: 2,
       name: 'Odegaard Maker Space',
       category: 'tech',
-      location: { x: 55, y: 40 },
+      location: { lat: 47.6566, lng: -122.3100 },
       rating: 4.6,
       verified: true,
       features: ['3D Printing', 'Charging Stations', 'Collaboration Space', 'Tech Support'],
@@ -53,7 +54,7 @@ const App = () => {
       id: 3,
       name: 'HUB Wellness Room',
       category: 'wellness',
-      location: { x: 60, y: 55 },
+      location: { lat: 47.6553, lng: -122.3045 },
       rating: 4.9,
       verified: true,
       features: ['Private', 'Meditation Space', 'Gender-Neutral', 'Accessible'],
@@ -67,7 +68,7 @@ const App = () => {
       id: 4,
       name: 'Local Point Cafe',
       category: 'food',
-      location: { x: 50, y: 60 },
+      location: { lat: 47.6560, lng: -122.3120 },
       rating: 4.5,
       verified: true,
       features: ['Coffee', 'Study-Friendly', 'Outlets', 'Free WiFi'],
@@ -81,7 +82,7 @@ const App = () => {
       id: 5,
       name: 'Quad Charging Stations',
       category: 'tech',
-      location: { x: 40, y: 50 },
+      location: { lat: 47.6570, lng: -122.3070 },
       rating: 4.3,
       verified: true,
       features: ['USB-C', 'USB-A', 'Wireless Charging', 'Outdoor Seating'],
@@ -95,7 +96,7 @@ const App = () => {
       id: 6,
       name: 'Student Lounge - Anderson Hall',
       category: 'social',
-      location: { x: 35, y: 45 },
+      location: { lat: 47.6548, lng: -122.3095 },
       rating: 4.4,
       verified: false,
       features: ['Couches', 'Microwave', 'Board Games', 'Casual Atmosphere'],
@@ -133,7 +134,10 @@ const App = () => {
         id: amenities.length + 1,
         name: newAmenity.name,
         category: newAmenity.category,
-        location: { x: 50 + Math.random() * 20 - 10, y: 50 + Math.random() * 20 - 10 },
+        location: { 
+          lat: 47.6553 + (Math.random() * 0.004 - 0.002), 
+          lng: -122.3035 + (Math.random() * 0.004 - 0.002) 
+        },
         rating: 0,
         verified: false,
         features: newAmenity.features.split(',').map(f => f.trim()),
@@ -169,7 +173,7 @@ const App = () => {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div className="bg-gradient-primary p-2 rounded-xl">
-                <Navigation className="text-white" size={24} />
+                <MapPin className="text-white" size={24} />
               </div>
               <div>
                 <h1 className="text-2xl font-bold text-gradient">
@@ -261,50 +265,13 @@ const App = () => {
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 py-6">
         {view === 'map' ? (
-          <div className="bg-white rounded-2xl shadow-xl p-6">
-            <div className="relative w-full h-[600px] bg-gradient-to-br from-green-100 to-blue-100 rounded-xl overflow-hidden">
-              {/* Campus Map Background */}
-              <div className="absolute inset-0 opacity-20">
-                <div className="absolute top-1/4 left-1/4 w-32 h-32 bg-gray-400 rounded-lg"></div>
-                <div className="absolute top-1/3 right-1/4 w-40 h-24 bg-gray-400 rounded-lg"></div>
-                <div className="absolute bottom-1/4 left-1/3 w-36 h-28 bg-gray-400 rounded-lg"></div>
-              </div>
-
-              {/* Amenity Pins */}
-              {filteredAmenities.map(amenity => {
-                const category = categories.find(c => c.id === amenity.category);
-                return (
-                  <button
-                    key={amenity.id}
-                    onClick={() => setSelectedAmenity(amenity)}
-                    className="absolute transform -translate-x-1/2 -translate-y-full hover:scale-125 transition-transform"
-                    style={{ left: `${amenity.location.x}%`, top: `${amenity.location.y}%` }}
-                  >
-                    <div className={`${category?.color} p-3 rounded-full shadow-lg`}>
-                      <MapPin className="text-white" size={24} />
-                    </div>
-                    {amenity.verified && (
-                      <div className="absolute -top-1 -right-1 bg-blue-500 rounded-full p-1">
-                        <Check size={12} className="text-white" />
-                      </div>
-                    )}
-                  </button>
-                );
-              })}
-
-              {/* Legend */}
-              <div className="absolute bottom-4 left-4 bg-white rounded-lg shadow-lg p-3">
-                <div className="text-xs font-semibold text-gray-700 mb-2">Legend</div>
-                <div className="space-y-1">
-                  {categories.slice(1).map(cat => (
-                    <div key={cat.id} className="flex items-center gap-2">
-                      <div className={`${cat.color} w-3 h-3 rounded-full`}></div>
-                      <span className="text-xs text-gray-600">{cat.name}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
+          <div>
+            <RealMap
+              amenities={filteredAmenities}
+              categories={categories}
+              onAmenityClick={setSelectedAmenity}
+              selectedAmenity={selectedAmenity}
+            />
 
             {/* Selected Amenity Details */}
             {selectedAmenity && (
