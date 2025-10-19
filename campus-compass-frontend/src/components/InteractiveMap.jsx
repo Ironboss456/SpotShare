@@ -167,7 +167,7 @@ const InteractiveMap = ({ amenities, categories, onAmenityClick, selectedAmenity
           }}
         >
           {/* Background - Campus Ground */}
-          <div className="absolute inset-0 bg-gradient-to-br from-green-50 via-green-100 to-emerald-100">
+          <div className="absolute inset-0 bg-white">
             {/* Grass texture effect */}
             <div className="absolute inset-0 opacity-10">
               <div className="absolute inset-0" 

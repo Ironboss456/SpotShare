@@ -66,47 +66,24 @@ const MapController = ({ selectedAmenity }) => {
 
 // === Add this inside RealMap.jsx ===
 
-function AddPin({ onAdd }) {
+function AddPin({ onAdd, onCreateEvent }) {
   const map = useMap();
 
   useEffect(() => {
     const handleClick = (e) => {
       const { lat, lng } = e.latlng;
-
-      const popupDiv = L.DomUtil.create('div', 'add-pin-popup');
-      popupDiv.innerHTML = `
-        <div style="text-align:center; font-family:sans-serif;">
-          <h3>📍 Add a New Place Here?</h3>
-          <p>Latitude: ${lat.toFixed(5)}<br>Longitude: ${lng.toFixed(5)}</p>
-        </div>
-      `;
-
-      const button = L.DomUtil.create('button', '', popupDiv);
-      button.textContent = 'Add This Location';
-      Object.assign(button.style, {
-        marginTop: '8px',
-        background: '#7e22ce',
-        color: 'white',
-        border: 'none',
-        borderRadius: '6px',
-        padding: '6px 12px',
-        cursor: 'pointer',
-      });
-
-      const popup = L.popup()
-        .setLatLng([lat, lng])
-        .setContent(popupDiv)
-        .openOn(map);
-
-      L.DomEvent.on(button, 'click', () => {
-        map.closePopup();
+      // Open the app-level creation modal by calling the provided callback with coords
+      if (typeof onAdd === 'function') {
         onAdd({ lat, lng });
-      });
+      } else if (typeof onCreateEvent === 'function') {
+        // fallback: create directly if no modal handler is provided
+        onCreateEvent({ title: 'New Event', description: '', location: { lat, lng } });
+      }
     };
 
     map.on('click', handleClick);
     return () => map.off('click', handleClick);
-  }, [map, onAdd]);
+  }, [map, onAdd, onCreateEvent]);
 
   return null;
 }
@@ -115,7 +92,7 @@ function AddPin({ onAdd }) {
 
 
 
-const RealMap = ({ amenities, categories, onAmenityClick, selectedAmenity, onAddLocation }) => {
+const RealMap = ({ amenities, categories, events = [], onAmenityClick, onEventClick, selectedAmenity, onAddLocation, onCreateEvent, onDeleteEvent, onDeleteAmenity }) => {
 
   const [showHint, setShowHint] = useState(true);
   useEffect(() => {
@@ -128,16 +105,44 @@ const RealMap = ({ amenities, categories, onAmenityClick, selectedAmenity, onAdd
   const [mapCenter] = useState(defaultCenter);
 
   const getMarkerColor = (categoryId) => {
+    // explicit palette covering frontend and legacy categories
+    const categoryColorMap = {
+      // legacy / sample categories
+      study: '#8b5cf6',       // purple
+      tech: '#06b6d4',        // cyan
+      wellness: '#10b981',    // green
+      food: '#f97316',        // orange
+      social: '#ec4899',      // pink
+      // frontend top-level categories
+      events: '#a855f7',      // purple-500
+      water: '#60a5fa',       // blue-400
+      restrooms: '#9ca3af',   // gray-400
+      atms: '#fbbf24',        // yellow-400
+      avoid: '#ef4444',       // red-500
+      bikes: '#16a34a',       // green-600
+    };
+
+    if (!categoryId) return '#3b82f6';
+    if (categoryColorMap[categoryId]) return categoryColorMap[categoryId];
+
+    // fallback: if a category object exists in the provided categories prop, try to map its color class
     const category = categories.find(c => c.id === categoryId);
-    const colorMap = {
+    const classToHex = {
       'bg-purple-500': '#a855f7',
       'bg-orange-500': '#f97316',
       'bg-pink-500': '#ec4899',
       'bg-yellow-500': '#eab308',
       'bg-green-500': '#22c55e',
       'bg-blue-500': '#3b82f6',
+      'bg-blue-400': '#60a5fa',
+      'bg-gray-400': '#9ca3af',
+      'bg-yellow-400': '#fbbf24',
+      'bg-red-400': '#ef4444',
+      'bg-green-600': '#16a34a'
     };
-    return colorMap[category?.color] || '#3b82f6';
+    if (category && category.color && classToHex[category.color]) return classToHex[category.color];
+
+    return '#3b82f6';
   };
 
   return (
@@ -171,11 +176,105 @@ const RealMap = ({ amenities, categories, onAmenityClick, selectedAmenity, onAdd
 
         {/* Map Controller */}
         <MapController selectedAmenity={selectedAmenity} />
-        <AddPin onAdd={onAddLocation} />
+        <AddPin onAdd={onAddLocation} onCreateEvent={onCreateEvent} />
 
+
+        {/* Event Markers */}
+        {events.map((ev, evIndex) => {
+          const lat = ev.location?.lat ?? ev.location?.x;
+          const lng = ev.location?.lng ?? ev.location?.y;
+          const markerColor = getMarkerColor(ev.category);
+
+          if (lat == null || lng == null) {
+            // if the event has a rawLocation string, render a marker at the default center with popup explaining missing coords
+            if (ev.rawLocation) {
+              return (
+                <Marker
+                  key={ev._id || ev.id}
+                  position={mapCenter}
+                  icon={createCustomIcon(markerColor, false)}
+                  eventHandlers={{ click: () => onEventClick && onEventClick(ev) }}
+                >
+                  <Popup minWidth={320} maxWidth={420}>
+                    <div className="p-2">
+                      <h3 className="font-bold text-gray-900">{ev.title || ev.name}</h3>
+                      <div className="text-xs text-gray-600">Location: {ev.rawLocation}</div>
+                      {ev.description && <p className="text-sm text-gray-700 mt-2">{ev.description}</p>}
+                      {(ev.features || []).length > 0 && (
+                        <div className="mt-3 flex flex-wrap gap-1">
+                          {(ev.features || []).slice(0, 3).map((f, i) => (
+                            <span key={i} className="bg-gray-100 text-gray-700 text-xs px-2 py-1 rounded">{f}</span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </Popup>
+                </Marker>
+              );
+            }
+            return null;
+          }
+
+          const isSelectedEvent = selectedAmenity && (selectedAmenity._id === ev._id || selectedAmenity.id === ev.id || selectedAmenity._id === ev.id || selectedAmenity.id === ev._id);
+          return (
+            <Marker
+              key={ev._id || ev.id || `event-${evIndex}`}
+              position={[lat, lng]}
+              icon={createCustomIcon(markerColor, false)}
+              eventHandlers={{ click: () => onEventClick && onEventClick(ev) }}
+              zIndexOffset={isSelectedEvent ? 1000 : 0}
+            >
+              <Popup minWidth={320} maxWidth={420}>
+                <div className="p-2">
+                  <h3 className="font-bold text-gray-900">{ev.title || ev.name}</h3>
+                  {ev.description && <p className="text-sm text-gray-700 mt-2">{ev.description}</p>}
+                  {(ev.features || []).length > 0 && (
+                    <div className="mt-3 flex flex-wrap gap-1">
+                      {(ev.features || []).slice(0, 3).map((f, i) => (
+                        <span key={i} className="bg-gray-100 text-gray-700 text-xs px-2 py-1 rounded">{f}</span>
+                      ))}
+                    </div>
+                  )}
+                  <div className="mt-2">
+                    <button
+                      onClick={async () => {
+                        if (!confirm('Delete this event?')) return;
+                        const id = ev._id || ev.id;
+                        try {
+                          // try deleting from events endpoint first
+                          let res = await fetch(`http://localhost:5001/api/events/public/${id}`, { method: 'DELETE' });
+                          if (res.ok) {
+                            onEventClick && onEventClick(null);
+                            if (typeof onDeleteEvent === 'function') onDeleteEvent(id);
+                            return;
+                          }
+                          // fallback: try deleting as an amenity (some events are saved into amenities)
+                          res = await fetch(`http://localhost:5001/api/amenities/public/${id}`, { method: 'DELETE' });
+                          if (res.ok) {
+                            onEventClick && onEventClick(null);
+                            if (typeof onDeleteAmenity === 'function') onDeleteAmenity(id);
+                            return;
+                          }
+                          // if neither succeeded, throw
+                          throw new Error('Delete returned non-ok');
+                        } catch (e) {
+                          console.error('Delete failed', e);
+                          alert('Failed to delete event/amenity');
+                        }
+                      }}
+                      className="px-2 py-1 bg-red-500 text-white rounded text-xs"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              </Popup>
+            </Marker>
+          );
+        })}
 
         {/* Amenity Markers */}
-        {amenities.map((amenity) => {
+        {amenities.map((amenity, aIndex) => {
           const category = categories.find(c => c.id === amenity.category);
           const Icon = category?.icon || MapPin;
           const markerColor = getMarkerColor(amenity.category);
@@ -183,7 +282,7 @@ const RealMap = ({ amenities, categories, onAmenityClick, selectedAmenity, onAdd
 
           return (
             <Marker
-              key={amenity.id}
+              key={amenity._id || amenity.id || `amenity-${aIndex}`}
               position={[amenity.location.lat, amenity.location.lng]}
               icon={createCustomIcon(markerColor, amenity.verified)}
               eventHandlers={{
@@ -191,11 +290,12 @@ const RealMap = ({ amenities, categories, onAmenityClick, selectedAmenity, onAdd
               }}
               zIndexOffset={isSelected ? 1000 : 0}
             >
-              <Popup className="custom-popup" minWidth={250} maxWidth={300}>
+              <Popup className="custom-popup" minWidth={320} maxWidth={420}>
                 <div className="p-2">
-                  <div className="flex items-start gap-3 mb-2">
-                    <div className={`${category?.color} p-2 rounded-lg`}>
-                      <Icon className="text-white" size={20} />
+                  <div className="flex items-start gap-4">
+                    {/* show a colored square matching the marker color */}
+                    <div className="p-3 rounded-xl" style={{ backgroundColor: getMarkerColor(amenity.category) }}>
+                      <Icon className="text-white" size={24} />
                     </div>
                     <div className="flex-1">
                       <h3 className="font-bold text-gray-900 flex items-center gap-2">
@@ -222,11 +322,11 @@ const RealMap = ({ amenities, categories, onAmenityClick, selectedAmenity, onAdd
                   </div>
 
                   <p className="text-sm text-gray-700 italic mb-2">
-                    "{amenity.aiSummary.substring(0, 100)}..."
+                    "{(amenity.aiSummary || '').substring(0, 100)}"
                   </p>
 
                   <div className="flex flex-wrap gap-1 mb-2">
-                    {amenity.features.slice(0, 3).map((feature, idx) => (
+                    {(amenity.features || []).slice(0, 3).map((feature, idx) => (
                       <span
                         key={idx}
                         className="bg-gray-100 text-gray-700 text-xs px-2 py-1 rounded"
@@ -236,68 +336,32 @@ const RealMap = ({ amenities, categories, onAmenityClick, selectedAmenity, onAdd
                     ))}
                   </div>
 
+                  {/* Delete button for amenities (public/demo delete) */}
                   <button
-                    onClick={() => onAmenityClick(amenity)}
-                    className="w-full bg-purple-600 text-white text-sm py-2 rounded-lg hover:bg-purple-700 transition-colors"
+                    onClick={async () => {
+                      if (!confirm('Delete this spot?')) return;
+                      const id = amenity._id || amenity.id;
+                      try {
+                        const res = await fetch(`http://localhost:5001/api/amenities/public/${id}`, { method: 'DELETE' });
+                        if (!res.ok) throw new Error('Delete failed');
+                        // notify parent to remove from UI
+                        onAmenityClick && onAmenityClick(null);
+                        if (typeof onDeleteAmenity === 'function') onDeleteAmenity(id);
+                      } catch (e) {
+                        console.error('Amenity delete failed', e);
+                        alert('Failed to delete spot');
+                      }
+                    }}
+                    className="mt-2 w-full bg-red-500 text-white text-sm py-2 rounded-lg hover:bg-red-600 transition-colors"
                   >
-                    View Details
+                    Delete
                   </button>
-                </div>
-              </Popup>
-            </Marker>
-          );
-        })}
+                 </div>
+               </Popup>
+             </Marker>
+           );
+         })}
       </MapContainer>
-
-      {/* Custom Zoom Controls (Google Maps style) */}
-      <div className="absolute bottom-24 right-4 z-[1000] flex flex-col gap-1 bg-white rounded-lg shadow-lg overflow-hidden">
-        <button
-          onClick={() => {
-            const map = document.querySelector('.leaflet-container');
-            if (map) map._leaflet_map.zoomIn();
-          }}
-          className="px-3 py-2 hover:bg-gray-100 transition-colors border-b border-gray-200"
-          title="Zoom in"
-        >
-          <span className="text-gray-700 font-bold text-xl">+</span>
-        </button>
-        <button
-          onClick={() => {
-            const map = document.querySelector('.leaflet-container');
-            if (map) map._leaflet_map.zoomOut();
-          }}
-          className="px-3 py-2 hover:bg-gray-100 transition-colors"
-          title="Zoom out"
-        >
-          <span className="text-gray-700 font-bold text-xl">−</span>
-        </button>
-      </div>
-
-      {/* Legend */}
-      <div className="absolute top-4 left-4 bg-white rounded-lg shadow-lg p-3 z-[1000] max-w-xs">
-        <div className="text-sm font-bold text-gray-800 mb-2 flex items-center gap-2">
-          <MapPin size={16} />
-          Categories
-        </div>
-        <div className="space-y-1">
-          {categories.slice(1).map((cat) => (
-            <div key={cat.id} className="flex items-center gap-2">
-              <div
-                className={`${cat.color} w-3 h-3 rounded-full`}
-                style={{ backgroundColor: getMarkerColor(cat.id) }}
-              ></div>
-              <span className="text-xs text-gray-700">{cat.name}</span>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Instructions */}
-      <div className="absolute bottom-4 left-4 bg-white px-4 py-2 rounded-lg shadow-lg z-[1000]">
-        <p className="text-xs text-gray-600">
-          🖱️ Click markers for info • Drag to pan • Scroll to zoom
-        </p>
-      </div>
     </div>
   );
 };

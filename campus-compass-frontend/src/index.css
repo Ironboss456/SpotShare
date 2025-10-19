@@ -28,16 +28,16 @@
 
 /* Custom utilities */
 @layer utilities {
-  .text-gradient {
-    @apply bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent;
+  .text-primary {
+    @apply text-blue-600;
   }
 
-  .bg-gradient-primary {
-    @apply bg-gradient-to-r from-blue-600 to-purple-600;
+  .bg-primary {
+    @apply bg-blue-600;
   }
 
-  .bg-gradient-reward {
-    @apply bg-gradient-to-r from-yellow-400 to-orange-500;
+  .bg-reward {
+    @apply bg-yellow-400;
   }
 
   .shadow-hover {

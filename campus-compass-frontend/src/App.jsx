@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { MapPin, Plus, Star, Award, Filter, Search, Coffee, Zap, Users, Heart, Book, TrendingUp, X, Check } from 'lucide-react';
 import RealMap from './components/RealMap';
 
@@ -14,14 +14,18 @@ const App = () => {
 
   const categories = [
     { id: 'all', name: 'All', icon: MapPin, color: 'bg-blue-500' },
-    { id: 'study', name: 'Study Spaces', icon: Book, color: 'bg-purple-500' },
-    { id: 'food', name: 'Food & Drinks', icon: Coffee, color: 'bg-orange-500' },
-    { id: 'wellness', name: 'Wellness', icon: Heart, color: 'bg-pink-500' },
-    { id: 'tech', name: 'Tech/Charging', icon: Zap, color: 'bg-yellow-500' },
-    { id: 'social', name: 'Social Spaces', icon: Users, color: 'bg-green-500' },
+    { id: 'events', name: 'Events', icon: Star, color: 'bg-purple-500' },
+    { id: 'water', name: 'Water Fountains', icon: Coffee, color: 'bg-blue-400' },
+    { id: 'restrooms', name: 'Restrooms', icon: Users, color: 'bg-gray-400' },
+    { id: 'atms', name: 'ATMs', icon: TrendingUp, color: 'bg-yellow-400' },
+    { id: 'avoid', name: 'Areas to Avoid', icon: Zap, color: 'bg-red-400' },
+    { id: 'bikes', name: 'Bike Racks', icon: MapPin, color: 'bg-green-500' },
   ];
 
-  const [amenities, setAmenities] = useState([
+  // start empty and load from backend; fallback to sample data if backend isn't available
+  const [amenities, setAmenities] = useState([]);
+
+  const sampleAmenities = [
     {
       id: 1,
       name: 'Suzzallo Library Reading Room',
@@ -106,20 +110,85 @@ const App = () => {
       hours: '7AM - 11PM',
       crowdLevel: 'moderate'
     },
-  ]);
+  ];
 
-  const [newAmenity, setNewAmenity] = useState({
-    name: '',
-    category: 'study',
-    features: '',
-    description: ''
-  });
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const res = await fetch('http://localhost:5001/api/amenities');
+        const json = await res.json();
+        // handle both array response (from router) or wrapped response
+        const raw = Array.isArray(json) ? json : json.data ? json.data : sampleAmenities;
+        const normalized = (raw || []).map(a => {
+          // normalize location: backend stores { x, y } while frontend expects { lat, lng }
+          let location = null;
+          if (a && a.location && typeof a.location === 'object') {
+            const loc = a.location;
+            if (loc.lat != null && loc.lng != null) location = { lat: Number(loc.lat), lng: Number(loc.lng) };
+            else if (loc.x != null && loc.y != null) location = { lat: Number(loc.x), lng: Number(loc.y) };
+          }
+          return {
+            ...a,
+            location,
+            features: Array.isArray(a.features) ? a.features : [],
+            reviews: a.reviews ?? 0,
+            contributions: a.contributions ?? 0,
+            rating: a.rating ?? 0,
+            aiSummary: a.aiSummary ?? '',
+          };
+        });
+        setAmenities(normalized);
+      } catch (e) {
+        setAmenities(sampleAmenities);
+      }
+    };
+    load();
+  }, []);
+
+  // load events from backend
+  const fetchEvents = async () => {
+    try {
+      const res = await fetch('http://localhost:5001/api/events');
+      const json = await res.json();
+      const raw = json.data || json;
+      const normalized = (raw || []).map(ev => {
+        const loc = ev.location;
+        if (typeof loc === 'string') {
+          return { ...ev, location: null, rawLocation: loc };
+        }
+        if (loc && typeof loc === 'object') {
+          const location = loc.lat != null ? { lat: loc.lat, lng: loc.lng } : loc.x != null ? { lat: loc.x, lng: loc.y } : null;
+          return { ...ev, location, rawLocation: typeof loc === 'string' ? loc : undefined };
+        }
+        return { ...ev, location: null };
+      });
+      setEvents(normalized);
+    } catch (err) {
+      console.error('Failed to load events', err);
+    }
+  };
+
+  useEffect(() => {
+    fetchEvents();
+  }, []);
+
+  const [events, setEvents] = useState([]);
+  const [isEventMode, setIsEventMode] = useState(false);
+  const [newAmenity, setNewAmenity] = useState({ name: '', category: 'events', features: '', description: '', location: null });
 
   const filteredAmenities = amenities.filter(amenity => {
     const matchesCategory = selectedCategory === 'all' || amenity.category === selectedCategory;
     const matchesSearch = amenity.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         amenity.features.some(f => f.toLowerCase().includes(searchQuery.toLowerCase()));
+                         (amenity.features || []).some(f => f.toLowerCase().includes(searchQuery.toLowerCase()));
     return matchesCategory && matchesSearch;
+  });
+  
+  // filter events by selected category as well (events created by users can have a category)
+  const filteredEvents = events.filter(ev => {
+    if (!ev) return false;
+    if (selectedCategory === 'all') return true;
+    // some legacy events may not have category — treat them as non-matching unless 'all' is selected
+    return ev.category === selectedCategory;
   });
 
   const showTempNotification = (message) => {
@@ -130,30 +199,178 @@ const App = () => {
 
   const handleAddAmenity = () => {
     if (newAmenity.name && newAmenity.description) {
-      const amenityToAdd = {
-        id: amenities.length + 1,
-        name: newAmenity.name,
-        category: newAmenity.category,
-        location: newAmenity.location || { 
-          lat: 47.6553 + (Math.random() * 0.004 - 0.002), 
-          lng: -122.3035 + (Math.random() * 0.004 - 0.002) 
-        },
-        rating: 0,
-        verified: false,
-        features: newAmenity.features.split(',').map(f => f.trim()),
-        aiSummary: `Recently added by the community. ${newAmenity.description}`,
-        reviews: 0,
-        contributions: 1,
-        hours: 'Hours pending verification',
-        crowdLevel: 'unknown'
-      };
+      (async () => {
+        try {
+          const loc = newAmenity.location || { lat: 47.6553 + (Math.random() * 0.004 - 0.002), lng: -122.3035 + (Math.random() * 0.004 - 0.002) };
+          // backend expects { x, y } for location in this project
+          const payload = {
+            name: newAmenity.name,
+            category: newAmenity.category,
+            features: newAmenity.features.split(',').map(f => f.trim()),
+            aiSummary: `Recently added by the community. ${newAmenity.description}`,
+            hours: 'Hours pending verification',
+            crowdLevel: 'unknown',
+            rating: 0,
+            verified: false,
+            // map lat/lng -> x/y to match backend schema
+            location: { x: loc.lat, y: loc.lng },
+          };
 
-      setAmenities([...amenities, amenityToAdd]);
-      setUserPoints(userPoints + 5);
-      showTempNotification('🎉 +5 Campus Credits earned! Thank you for contributing!');
-      setShowAddForm(false);
-      setNewAmenity({ name: '', category: 'study', features: '', description: '' });
+          const res = await fetch('http://localhost:5001/api/amenities/public', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+          });
+          const json = await res.json();
+          const created = json.data || json; // handle both shapes
+          // normalize location back to {lat,lng} for frontend and ensure optional fields exist
+          const normalized = {
+            ...created,
+            location: created.location ? { lat: created.location.x ?? created.location.lat, lng: created.location.y ?? created.location.lng } : loc,
+            features: Array.isArray(created.features) ? created.features : [],
+            reviews: created.reviews ?? 0,
+            contributions: created.contributions ?? 0,
+            rating: created.rating ?? 0,
+            aiSummary: created.aiSummary ?? `Recently added by the community. ${newAmenity.description}`,
+          };
+
+          setAmenities(prev => [...prev, normalized]);
+          setUserPoints(prev => prev + 5);
+          showTempNotification('🎉 +5 Campus Credits earned! Thank you for contributing!');
+          setShowAddForm(false);
+          setNewAmenity({ name: '', category: 'study', features: '', description: '' });
+        } catch (err) {
+          console.error('Failed to save amenity', err);
+          showTempNotification('⚠️ Failed to save. Showing locally only.');
+          // fallback to local add
+          const amenityToAdd = {
+            id: amenities.length + 1,
+            name: newAmenity.name,
+            category: newAmenity.category,
+            location: newAmenity.location || { lat: 47.6553 + (Math.random() * 0.004 - 0.002), lng: -122.3035 + (Math.random() * 0.004 - 0.002) },
+            rating: 0,
+            verified: false,
+            features: newAmenity.features.split(',').map(f => f.trim()),
+            aiSummary: `Recently added by the community. ${newAmenity.description}`,
+            reviews: 0,
+            contributions: 1,
+            hours: 'Hours pending verification',
+            crowdLevel: 'unknown'
+          };
+          setAmenities(prev => [...prev, amenityToAdd]);
+          setUserPoints(prev => prev + 5);
+          setShowAddForm(false);
+          setNewAmenity({ name: '', category: 'study', features: '', description: '' });
+        }
+      })();
     }
+  };
+
+  const handleEventSubmit = (eventPayload) => {
+    (async () => {
+      try {
+        const res = await fetch('http://localhost:5001/api/events/public', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(eventPayload),
+        });
+        const json = await res.json();
+        if (json.data) {
+          const ev = json.data;
+          const loc = ev.location || {};
+          const location = loc.lat != null ? { lat: loc.lat, lng: loc.lng } : loc.x != null ? { lat: loc.x, lng: loc.y } : loc;
+          // refetch events so backend state is authoritative, then switch category filter so it becomes visible
+          await fetchEvents();
+          setSelectedCategory(ev.category || 'events');
+          setUserPoints(prev => prev + 10);
+          showTempNotification('🎉 +10 Campus Credits earned! Event added.');
+         } else {
+           showTempNotification('⚠️ Failed to add event. Please try again.');
+         }
+       } catch (err) {
+         console.error('Failed to save event', err);
+         showTempNotification('⚠️ Failed to save event. Showing locally only.');
+         // fallback to local add
+         const eventToAdd = {
+           id: events.length + 1,
+           title: eventPayload.title,
+           description: eventPayload.description,
+           location: eventPayload.location,
+           category: eventPayload.category || 'events',
+           createdAt: new Date().toISOString(),
+         };
+         setEvents(prev => [...prev, eventToAdd]);
+         setSelectedCategory(eventToAdd.category);
+         setUserPoints(prev => prev + 10);
+       }
+     })();
+     setShowAddForm(false);
+     setNewAmenity({ name: '', category: 'study', features: '', description: '' });
+   };
+
+  // Persist events by saving them as amenities (uses amenities collection/endpoint)
+  const handleEventAsAmenity = () => {
+    if (!newAmenity.name) return;
+    (async () => {
+      try {
+        const loc = newAmenity.location || { lat: 47.6553 + (Math.random() * 0.004 - 0.002), lng: -122.3035 + (Math.random() * 0.004 - 0.002) };
+        const payload = {
+          name: newAmenity.name,
+          category: newAmenity.category || 'events',
+          features: newAmenity.features ? newAmenity.features.split(',').map(f => f.trim()).filter(Boolean) : [],
+          aiSummary: newAmenity.description || '',
+          hours: 'TBD',
+          crowdLevel: 'unknown',
+          rating: 0,
+          verified: false,
+          location: { x: loc.lat, y: loc.lng },
+        };
+
+        const res = await fetch('http://localhost:5001/api/amenities/public', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        const json = await res.json();
+        const created = json.data || json;
+        const normalized = {
+          ...created,
+          location: created.location ? { lat: created.location.x ?? created.location.lat, lng: created.location.y ?? created.location.lng } : loc,
+          features: Array.isArray(created.features) ? created.features : [],
+          reviews: created.reviews ?? 0,
+          contributions: created.contributions ?? 0,
+          rating: created.rating ?? 0,
+          aiSummary: created.aiSummary ?? newAmenity.description ?? '',
+        };
+
+        setAmenities(prev => [...prev, normalized]);
+        setUserPoints(prev => prev + 10);
+        showTempNotification('🎉 +10 Campus Credits earned! Event added.');
+        setShowAddForm(false);
+        setNewAmenity({ name: '', category: 'study', features: '', description: '' });
+      } catch (err) {
+        console.error('Failed to save event as amenity', err);
+        showTempNotification('⚠️ Failed to save event. Showing locally only.');
+        const amenityToAdd = {
+          id: amenities.length + 1,
+          name: newAmenity.name,
+          category: newAmenity.category || 'events',
+          location: newAmenity.location || { lat: 47.6553 + (Math.random() * 0.004 - 0.002), lng: -122.3035 + (Math.random() * 0.004 - 0.002) },
+          rating: 0,
+          verified: false,
+          features: newAmenity.features ? newAmenity.features.split(',').map(f => f.trim()).filter(Boolean) : [],
+          aiSummary: newAmenity.description || '',
+          reviews: 0,
+          contributions: 1,
+          hours: 'TBD',
+          crowdLevel: 'unknown'
+        };
+        setAmenities(prev => [...prev, amenityToAdd]);
+        setUserPoints(prev => prev + 10);
+        setShowAddForm(false);
+        setNewAmenity({ name: '', category: 'study', features: '', description: '' });
+      }
+    })();
   };
 
   const getCrowdColor = (level) => {
@@ -165,26 +382,34 @@ const App = () => {
     }
   };
 
+  const handleDeleteEvent = (id) => {
+    setEvents(prev => prev.filter(e => (e._id || e.id) !== id));
+  };
+
+  const handleDeleteAmenity = (id) => {
+    setAmenities(prev => prev.filter(a => (a._id || a.id) !== id));
+  };
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50">
+    <div className="min-h-screen bg-white">
       {/* Header */}
       <header className="bg-white shadow-md sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="bg-gradient-primary p-2 rounded-xl">
+              <div className="bg-primary p-2 rounded-xl">
                 <MapPin className="text-white" size={24} />
               </div>
               <div>
                 <h1 className="text-2xl font-bold text-gradient">
-                  Campus Compass
+                  SpotShare
                 </h1>
                 <p className="text-xs text-gray-600">Community-Powered Amenities</p>
               </div>
             </div>
             
             <div className="flex items-center gap-4">
-              <div className="bg-gradient-reward px-4 py-2 rounded-full flex items-center gap-2">
+              <div className="bg-reward px-4 py-2 rounded-full flex items-center gap-2">
                 <Award className="text-white" size={20} />
                 <span className="font-bold text-white">{userPoints} Credits</span>
               </div>
@@ -192,7 +417,7 @@ const App = () => {
                 onClick={() => {
                   alert("📍 Click a location on the map to add a new spot!");
                 }}
-                className="bg-gradient-primary text-white px-4 py-2 rounded-lg flex items-center gap-2 shadow-hover"
+                className="bg-primary text-white px-4 py-2 rounded-lg flex items-center gap-2 shadow-hover"
               >
                 <Plus size={20} />
                 <span className="hidden sm:inline">Add Spot</span>
@@ -213,24 +438,10 @@ const App = () => {
               />
             </div>
             <div className="flex gap-2">
-              <button
-                onClick={() => setView('map')}
-                className={`px-4 py-2 rounded-lg flex items-center gap-2 transition-colors ${
-                  view === 'map' ? 'bg-purple-600 text-white' : 'bg-white text-gray-700 border border-gray-300'
-                }`}
-              >
+              <div className="px-4 py-2 rounded-lg flex items-center gap-2 bg-purple-600 text-white">
                 <MapPin size={18} />
-                Map
-              </button>
-              <button
-                onClick={() => setView('list')}
-                className={`px-4 py-2 rounded-lg flex items-center gap-2 transition-colors ${
-                  view === 'list' ? 'bg-purple-600 text-white' : 'bg-white text-gray-700 border border-gray-300'
-                }`}
-              >
-                <Filter size={18} />
-                List
-              </button>
+                <span className="font-medium">Map</span>
+              </div>
             </div>
           </div>
 
@@ -266,209 +477,136 @@ const App = () => {
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 py-6">
-        {view === 'map' ? (
-          <div>
-            <RealMap
-              amenities={filteredAmenities}
-              categories={categories}
-              onAmenityClick={setSelectedAmenity}
-              selectedAmenity={selectedAmenity}
-              onAddLocation={(coords) => {
-                setNewAmenity({
-                  ...newAmenity,
-                  location: coords
-                });
-                setShowAddForm(true);
-              }}
-            />
-
-
-            {/* Selected Amenity Details */}
-            {selectedAmenity && (
-              <div className="mt-6 bg-gradient-to-br from-purple-50 to-blue-50 rounded-xl p-6 relative">
-                <button
-                  onClick={() => setSelectedAmenity(null)}
-                  className="absolute top-4 right-4 text-gray-500 hover:text-gray-700"
-                >
-                  <X size={24} />
-                </button>
-                
-                <div className="flex items-start justify-between mb-4">
-                  <div>
-                    <h3 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
-                      {selectedAmenity.name}
-                      {selectedAmenity.verified && (
-                        <span className="bg-blue-500 text-white text-xs px-2 py-1 rounded-full">Verified</span>
-                      )}
-                    </h3>
-                    <div className="flex items-center gap-4 mt-2 text-sm text-gray-600">
-                      <div className="flex items-center gap-1">
-                        <Star className="text-yellow-500 fill-yellow-500" size={16} />
-                        <span className="font-semibold">{selectedAmenity.rating}</span>
-                        <span>({selectedAmenity.reviews} reviews)</span>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <Users size={16} />
-                        <span>{selectedAmenity.contributions} contributions</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="mb-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    <TrendingUp size={18} className="text-purple-600" />
-                    <span className="font-semibold text-gray-700">AI Summary</span>
-                  </div>
-                  <p className="text-gray-700 bg-white rounded-lg p-3 italic">
-                    "{selectedAmenity.aiSummary}"
-                  </p>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                  <div>
-                    <div className="text-sm font-semibold text-gray-700 mb-2">Features</div>
-                    <div className="flex flex-wrap gap-2">
-                      {selectedAmenity.features.map((feature, idx) => (
-                        <span key={idx} className="bg-white px-3 py-1 rounded-full text-sm text-gray-700">
-                          {feature}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                  <div>
-                    <div className="text-sm font-semibold text-gray-700 mb-2">Details</div>
-                    <div className="space-y-1 text-sm text-gray-700">
-                      <div>⏰ {selectedAmenity.hours}</div>
-                      <div className="flex items-center gap-2">
-                        <span>Current crowd:</span>
-                        <span className={`font-semibold ${getCrowdColor(selectedAmenity.crowdLevel)}`}>
-                          {selectedAmenity.crowdLevel}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <button className="w-full bg-gradient-primary text-white py-3 rounded-lg font-semibold shadow-hover">
-                  Get Directions
-                </button>
-              </div>
-            )}
-          </div>
-        ) : (
-          <div className="space-y-4">
-            {filteredAmenities.map(amenity => {
-              const category = categories.find(c => c.id === amenity.category);
-              const Icon = category?.icon || MapPin;
-              return (
-                <div key={amenity.id} className="bg-white rounded-xl shadow-lg p-6 shadow-hover">
-                  <div className="flex items-start gap-4">
-                    <div className={`${category?.color} p-3 rounded-xl`}>
-                      <Icon className="text-white" size={24} />
-                    </div>
-                    <div className="flex-1">
-                      <div className="flex items-start justify-between mb-2">
-                        <div>
-                          <h3 className="text-xl font-bold text-gray-800 flex items-center gap-2">
-                            {amenity.name}
-                            {amenity.verified && (
-                              <Check size={16} className="text-blue-500" />
-                            )}
-                          </h3>
-                          <div className="flex items-center gap-3 mt-1 text-sm text-gray-600">
-                            <div className="flex items-center gap-1">
-                              <Star className="text-yellow-500 fill-yellow-500" size={14} />
-                              <span>{amenity.rating}</span>
-                            </div>
-                            <span>•</span>
-                            <span>{amenity.reviews} reviews</span>
-                            <span>•</span>
-                            <span className={getCrowdColor(amenity.crowdLevel)}>
-                              {amenity.crowdLevel} crowd
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                      
-                      <p className="text-gray-700 mb-3 italic">"{amenity.aiSummary}"</p>
-                      
-                      <div className="flex flex-wrap gap-2 mb-3">
-                        {amenity.features.map((feature, idx) => (
-                          <span key={idx} className="bg-gray-100 px-3 py-1 rounded-full text-xs text-gray-700">
-                            {feature}
-                          </span>
-                        ))}
-                      </div>
-                      
-                      <div className="text-sm text-gray-600">⏰ {amenity.hours}</div>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
+        <div>
+          <RealMap
+            amenities={filteredAmenities}
+            categories={categories}
+            events={filteredEvents}
+            onAmenityClick={setSelectedAmenity}
+            onEventClick={(ev) => setSelectedAmenity(ev)}
+            onDeleteEvent={handleDeleteEvent}
+            onDeleteAmenity={handleDeleteAmenity}
+            selectedAmenity={selectedAmenity}
+            onAddLocation={(coords) => {
+              // pre-fill new event location and open add modal
+              setNewAmenity({ ...newAmenity, location: coords, category: newAmenity?.category || 'events' });
+              setIsEventMode(true);
+              setShowAddForm(true);
+            }}
+            onCreateEvent={handleEventSubmit}
+          />
+        </div>
       </main>
 
-      {/* Add Amenity Modal */}
+      {/* Add Amenity / Event Modal */}
       {showAddForm && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full p-6">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-2xl font-bold text-gray-800">Add New Amenity</h2>
+              <h2 className="text-2xl font-bold text-gray-800">Add New</h2>
               <button onClick={() => setShowAddForm(false)} className="text-gray-500 hover:text-gray-700">
                 <X size={24} />
               </button>
             </div>
-            
+
             <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Amenity Name</label>
-                <input
-                  type="text"
-                  value={newAmenity.name}
-                  onChange={(e) => setNewAmenity({...newAmenity, name: e.target.value})}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-600 focus:border-transparent outline-none"
-                  placeholder="e.g., Secret Study Nook in Allen Library"
-                />
-              </div>
+              {/* Removed top radio selector — creation type is chosen via the Category/Type controls below */}
 
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Category</label>
-                <select
-                  value={newAmenity.category}
-                  onChange={(e) => setNewAmenity({...newAmenity, category: e.target.value})}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-600 focus:border-transparent outline-none"
-                >
-                  {categories.slice(1).map(cat => (
-                    <option key={cat.id} value={cat.id}>{cat.name}</option>
-                  ))}
-                </select>
-              </div>
+              {isEventMode ? (
+                <>
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">Event Title</label>
+                    <input
+                      type="text"
+                      value={newAmenity.name}
+                      onChange={(e) => setNewAmenity({...newAmenity, name: e.target.value})}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-600 outline-none"
+                      placeholder="e.g., Campus Picnic"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">Description</label>
+                    <textarea
+                      value={newAmenity.description}
+                      onChange={(e) => setNewAmenity({...newAmenity, description: e.target.value})}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-600 outline-none"
+                      rows={3}
+                      placeholder="Event details..."
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">Traits (comma-separated)</label>
+                    <input
+                      type="text"
+                      value={newAmenity.features}
+                      onChange={(e) => setNewAmenity({...newAmenity, features: e.target.value})}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-600 outline-none"
+                      placeholder="e.g., Outdoor, Family-friendly, Free Snacks"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">Category</label>
+                    <select
+                      value={newAmenity.category || 'events'}
+                      onChange={(e) => setNewAmenity({...newAmenity, category: e.target.value})}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-600 outline-none"
+                    >
+                      {categories.slice(1).map(cat => (
+                        <option key={cat.id} value={cat.id}>{cat.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">Amenity Name</label>
+                    <input
+                      type="text"
+                      value={newAmenity.name}
+                      onChange={(e) => setNewAmenity({...newAmenity, name: e.target.value})}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-600 outline-none"
+                      placeholder="e.g., Secret Study Nook in Allen Library"
+                    />
+                  </div>
 
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Features (comma-separated)</label>
-                <input
-                  type="text"
-                  value={newAmenity.features}
-                  onChange={(e) => setNewAmenity({...newAmenity, features: e.target.value})}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-600 focus:border-transparent outline-none"
-                  placeholder="e.g., Quiet, WiFi, Outlets, Great Lighting"
-                />
-              </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">Category</label>
+                    <select
+                      value={newAmenity.category}
+                      onChange={(e) => setNewAmenity({...newAmenity, category: e.target.value})}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-600 outline-none"
+                    >
+                      {categories.slice(1).map(cat => (
+                        <option key={cat.id} value={cat.id}>{cat.name}</option>
+                      ))}
+                    </select>
+                  </div>
 
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Description</label>
-                <textarea
-                  value={newAmenity.description}
-                  onChange={(e) => setNewAmenity({...newAmenity, description: e.target.value})}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-600 focus:border-transparent outline-none"
-                  rows={3}
-                  placeholder="Share what makes this spot special..."
-                />
-              </div>
-              
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">Features (comma-separated)</label>
+                    <input
+                      type="text"
+                      value={newAmenity.features}
+                      onChange={(e) => setNewAmenity({...newAmenity, features: e.target.value})}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-600 outline-none"
+                      placeholder="e.g., Quiet, WiFi, Outlets, Great Lighting"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">Description</label>
+                    <textarea
+                      value={newAmenity.description}
+                      onChange={(e) => setNewAmenity({...newAmenity, description: e.target.value})}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-600 outline-none"
+                      rows={3}
+                      placeholder="Share what makes this spot special..."
+                    />
+                  </div>
+                </>
+              )}
+
               {newAmenity.location && (
                 <div className="text-sm text-gray-600">
                   📍 Location: {newAmenity.location.lat.toFixed(5)}, {newAmenity.location.lng.toFixed(5)}
@@ -482,12 +620,27 @@ const App = () => {
                 </div>
               </div>
 
-              <button
-                onClick={handleAddAmenity}
-                className="w-full bg-gradient-primary text-white py-3 rounded-lg font-semibold shadow-hover"
-              >
-                Submit Amenity
-              </button>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => {
+                    if (isEventMode) {
+                      // save events into the amenities collection so they persist
+                      handleEventAsAmenity();
+                    } else {
+                       handleAddAmenity();
+                     }
+                   }}
+                   className="flex-1 bg-primary text-white py-3 rounded-lg font-semibold shadow-hover"
+                 >
+                  {isEventMode ? 'Submit Event' : 'Submit Amenity'}
+                </button>
+                <button
+                  onClick={() => setShowAddForm(false)}
+                  className="flex-1 bg-white border border-gray-300 py-3 rounded-lg font-semibold"
+                >
+                  Cancel
+                </button>
+              </div>
             </div>
           </div>
         </div>
