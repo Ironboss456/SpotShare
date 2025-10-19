@@ -134,7 +134,7 @@ const App = () => {
         id: amenities.length + 1,
         name: newAmenity.name,
         category: newAmenity.category,
-        location: { 
+        location: newAmenity.location || { 
           lat: 47.6553 + (Math.random() * 0.004 - 0.002), 
           lng: -122.3035 + (Math.random() * 0.004 - 0.002) 
         },
@@ -271,6 +271,14 @@ const App = () => {
               categories={categories}
               onAmenityClick={setSelectedAmenity}
               selectedAmenity={selectedAmenity}
+              onAddLocation={(coords) => {
+                // Store coordinates and open form
+                setNewAmenity({
+                  ...newAmenity,
+                  location: coords
+                });
+                setShowAddForm(true);
+              }}
             />
 
             {/* Selected Amenity Details */}
@@ -458,7 +466,11 @@ const App = () => {
                   placeholder="Share what makes this spot special..."
                 />
               </div>
-
+              {newAmenity.location && (
+                <div className="text-sm text-gray-600">
+                  📍 Location: {newAmenity.location.lat.toFixed(5)}, {newAmenity.location.lng.toFixed(5)}
+                </div>
+              )}
               <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
                 <div className="flex items-center gap-2 text-yellow-800 text-sm">
                   <Award size={18} />

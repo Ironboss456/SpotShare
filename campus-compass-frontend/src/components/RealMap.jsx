@@ -70,12 +70,41 @@ function AddPin({ onAdd }) {
   useEffect(() => {
     const handleClick = (e) => {
       const { lat, lng } = e.latlng;
-      onAdd({ lat, lng });
-      L.popup()
+
+      // Create popup container manually
+      const popupDiv = L.DomUtil.create('div', 'add-pin-popup');
+      popupDiv.innerHTML = `
+        <div style="text-align:center; font-family:sans-serif;">
+          <h3 style="margin-bottom:8px;">📍 Add a New Place Here?</h3>
+          <p style="font-size:13px; color:#555;">
+            Latitude: ${lat.toFixed(5)}<br>Longitude: ${lng.toFixed(5)}
+          </p>
+        </div>
+      `;
+      const button = L.DomUtil.create('button', '', popupDiv);
+      button.textContent = 'Add This Location';
+      Object.assign(button.style, {
+        marginTop: '8px',
+        background: '#7e22ce',
+        color: 'white',
+        border: 'none',
+        borderRadius: '6px',
+        padding: '6px 12px',
+        cursor: 'pointer',
+      });
+
+      const popup = L.popup()
         .setLatLng([lat, lng])
-        .setContent(`📍 New pin added at<br>${lat.toFixed(5)}, ${lng.toFixed(5)}`)
+        .setContent(popupDiv)
         .openOn(map);
+
+      // Attach event listener safely
+      L.DomEvent.on(button, 'click', () => {
+        map.closePopup();
+        onAdd({ lat, lng });
+      });
     };
+
     map.on('click', handleClick);
     return () => map.off('click', handleClick);
   }, [map, onAdd]);
@@ -83,8 +112,7 @@ function AddPin({ onAdd }) {
   return null;
 }
 
-
-const RealMap = ({ amenities, categories, onAmenityClick, selectedAmenity }) => {
+const RealMap = ({ amenities, categories, onAmenityClick, selectedAmenity, onAddLocation }) => {
   // University of Washington coordinates as default center
   const defaultCenter = [47.6553, -122.3035];
   const [mapCenter] = useState(defaultCenter);
@@ -126,7 +154,7 @@ const RealMap = ({ amenities, categories, onAmenityClick, selectedAmenity }) => 
 
         {/* Map Controller */}
         <MapController selectedAmenity={selectedAmenity} />
-        <AddPin onAdd={(coords) => console.log('User pinned:', coords)} />
+        <AddPin onAdd={onAddLocation} />
 
         {/* Amenity Markers */}
         {amenities.map((amenity) => {
