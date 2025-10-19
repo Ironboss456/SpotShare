@@ -189,7 +189,9 @@ const App = () => {
                 <span className="font-bold text-white">{userPoints} Credits</span>
               </div>
               <button
-                onClick={() => setShowAddForm(true)}
+                onClick={() => {
+                  alert("📍 Click a location on the map to add a new spot!");
+                }}
                 className="bg-gradient-primary text-white px-4 py-2 rounded-lg flex items-center gap-2 shadow-hover"
               >
                 <Plus size={20} />
@@ -279,6 +281,7 @@ const App = () => {
                 setShowAddForm(true);
               }}
             />
+
 
             {/* Selected Amenity Details */}
             {selectedAmenity && (

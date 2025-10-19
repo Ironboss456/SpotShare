@@ -73,14 +73,11 @@ function AddPin({ onAdd }) {
     const handleClick = (e) => {
       const { lat, lng } = e.latlng;
 
-      // Create popup container manually
       const popupDiv = L.DomUtil.create('div', 'add-pin-popup');
       popupDiv.innerHTML = `
         <div style="text-align:center; font-family:sans-serif;">
-          <h3 style="margin-bottom:8px;">📍 Add a New Place Here?</h3>
-          <p style="font-size:13px; color:#555;">
-            Latitude: ${lat.toFixed(5)}<br>Longitude: ${lng.toFixed(5)}
-          </p>
+          <h3>📍 Add a New Place Here?</h3>
+          <p>Latitude: ${lat.toFixed(5)}<br>Longitude: ${lng.toFixed(5)}</p>
         </div>
       `;
 
@@ -101,7 +98,6 @@ function AddPin({ onAdd }) {
         .setContent(popupDiv)
         .openOn(map);
 
-      // Use Leaflet's safe event handler attachment
       L.DomEvent.on(button, 'click', () => {
         map.closePopup();
         onAdd({ lat, lng });
@@ -118,7 +114,15 @@ function AddPin({ onAdd }) {
 
 
 
+
 const RealMap = ({ amenities, categories, onAmenityClick, selectedAmenity, onAddLocation }) => {
+
+  const [showHint, setShowHint] = useState(true);
+  useEffect(() => {
+    const timer = setTimeout(() => setShowHint(false), 5000);
+    return () => clearTimeout(timer);
+  }, []);
+
   // University of Washington coordinates as default center
   const defaultCenter = [47.6553, -122.3035];
   const [mapCenter] = useState(defaultCenter);
@@ -138,6 +142,12 @@ const RealMap = ({ amenities, categories, onAmenityClick, selectedAmenity, onAdd
 
   return (
     <div className="relative w-full h-[calc(100vh-200px)] rounded-2xl overflow-hidden shadow-xl z-0">
+      {showHint && (
+      <div className="absolute top-5 left-1/2 -translate-x-1/2 bg-white/90 text-gray-800 px-4 py-2 rounded-lg shadow-md text-sm z-[1000] animate-fade">
+        💡 Click anywhere on the map to add a new place!
+      </div>
+      )}
+      
       <MapContainer
         center={mapCenter}
         zoom={15}
@@ -145,6 +155,7 @@ const RealMap = ({ amenities, categories, onAmenityClick, selectedAmenity, onAdd
         className="w-full h-full"
         zoomControl={false}
       >
+
         {/* Map Tiles - Using OpenStreetMap (free, no API key needed) */}
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
