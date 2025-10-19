@@ -393,3 +393,135 @@ app.use((req, res) =>
 );
 
 app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
+
+// NEW: Gemini / Generative AI integration
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || process.env.GOOGLE_API_KEY_BEARER;
+
+async function callGemini(promptText) {
+  if (!GEMINI_API_KEY) throw new Error('Gemini API key not configured (set GEMINI_API_KEY)');
+
+  // Use Google's Generative Language REST endpoint (text-bison) as a Gemini-compatible model
+  // If the key looks like a Google API key (starts with 'AIza'), send it as ?key=... otherwise try Bearer
+  const baseUrl = 'https://generativelanguage.googleapis.com/v1beta2/models/text-bison-001:generateText';
+  const url = GEMINI_API_KEY.startsWith('AIza') ? `${baseUrl}?key=${encodeURIComponent(GEMINI_API_KEY)}` : baseUrl;
+
+  const body = {
+    prompt: { text: promptText },
+    temperature: 0.2,
+    maxOutputTokens: 512
+  };
+
+  const headers = { 'Content-Type': 'application/json' };
+  if (!GEMINI_API_KEY.startsWith('AIza')) headers['Authorization'] = `Bearer ${GEMINI_API_KEY}`;
+
+  const resp = await fetch(url, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(body)
+  });
+
+  if (!resp.ok) {
+    const text = await resp.text();
+    throw new Error(`Gemini API error: ${resp.status} ${text}`);
+  }
+  const json = await resp.json();
+
+  // Normalize several possible response shapes from Google / Gemini-like APIs
+  // Common shapes: { candidates: [{ output }] } or { generations: [{ text }] } or { output: '...' }
+  let output = null;
+  if (json.candidates && json.candidates.length) {
+    output = json.candidates[0].output || json.candidates[0].content?.map(c=>c.text).join('\n') || json.candidates[0].content?.[0]?.text;
+  }
+  if (!output && json.generations && json.generations.length) {
+    output = json.generations.map(g => g.text).join('\n');
+  }
+  if (!output && json.output) output = typeof json.output === 'string' ? json.output : JSON.stringify(json.output);
+  if (!output && json.text) output = json.text;
+  if (!output) output = JSON.stringify(json);
+  return output;
+}
+
+function haversineDistance(lat1, lon1, lat2, lon2) {
+  const toRad = (v) => (v * Math.PI) / 180;
+  const R = 6371e3; // meters
+  const φ1 = toRad(lat1);
+  const φ2 = toRad(lat2);
+  const Δφ = toRad(lat2 - lat1);
+  const Δλ = toRad(lon2 - lon1);
+  const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) + Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c; // meters
+}
+
+// POST /api/ai/query
+// body: { query: string, lat?: number, lon?: number, type?: 'amenity'|'event'|'any' }
+app.post('/api/ai/query', async (req, res) => {
+  try {
+    const { query, lat, lon, type } = req.body || {};
+    if (!query) return res.status(400).json({ success: false, message: 'Query required' });
+
+    // Gather context: nearest amenities and events
+    const maxResults = 10;
+    const amenitiesList = await Amenity.find({}).limit(200).lean().catch(() => []);
+
+    // Try to load Event model if present
+    let eventsList = [];
+    try {
+      const Event = mongoose.models.Event || mongoose.model('Event');
+      eventsList = await Event.find({}).limit(200).lean().catch(() => []);
+    } catch (e) {
+      // ignore if no Event model
+    }
+
+    // Combine and compute distances if lat/lon provided
+    const combined = [];
+    if (Array.isArray(amenitiesList)) amenitiesList.forEach(a => combined.push({ type: 'amenity', doc: a }));
+    if (Array.isArray(eventsList)) eventsList.forEach(e => combined.push({ type: 'event', doc: e }));
+
+    if (lat != null && lon != null && combined.length) {
+      combined.forEach(item => {
+        const loc = item.doc.location || {};
+        const itemLat = loc.y ?? loc.coordinates?.[1] ?? loc.lat ?? null;
+        const itemLon = loc.x ?? loc.coordinates?.[0] ?? loc.lon ?? null;
+        if (itemLat != null && itemLon != null) {
+          item.distance = haversineDistance(lat, lon, itemLat, itemLon);
+        } else {
+          item.distance = Number.POSITIVE_INFINITY;
+        }
+      });
+      combined.sort((a, b) => (a.distance || Infinity) - (b.distance || Infinity));
+    }
+
+    const nearest = combined.slice(0, maxResults);
+
+    // Build context string and rich context array
+    const contextLines = nearest.map((it, idx) => {
+      const d = it.distance === Infinity ? 'unknown distance' : `${Math.round(it.distance)} m`;
+      const doc = it.doc;
+      const name = doc.name || doc.title || 'Unnamed';
+      const cat = doc.category || doc.type || it.type;
+      const features = Array.isArray(doc.features) ? doc.features.join(', ') : (doc.description || 'no details');
+      return `${idx + 1}. [${it.type}] ${name} — category: ${cat}; features: ${features}; distance: ${d}`;
+    }).join('\n');
+
+    const prompt = `You are Campus Compass assistant. The user asked: "${query}". Provide a concise answer. Use the following nearby context (name, category, features, and distance) when relevant. If none are relevant, say so.\n\nNearby context:\n${contextLines}\n\nAnswer:`;
+
+    const aiResponse = await callGemini(prompt);
+
+    const richContext = nearest.map(n => {
+      const doc = n.doc;
+      return {
+        id: doc._id || doc.id || null,
+        type: n.type,
+        name: doc.name || doc.title || 'Unnamed',
+        category: doc.category || null,
+        features: Array.isArray(doc.features) ? doc.features.slice(0,5) : (doc.description ? [doc.description] : []),
+        distance: n.distance === Infinity ? null : Math.round(n.distance)
+      };
+    });
+
+    res.json({ success: true, answer: aiResponse, context: richContext });
+  } catch (e) {
+    res.status(500).json({ success: false, message: e.message });
+  }
+});
