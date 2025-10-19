@@ -1,13 +1,10 @@
-<<<<<<< HEAD
 import axios from 'axios';
 import { useState, useEffect } from 'react';
 
 import { MapPin, Plus, Star, Award, Filter, Search, Navigation, Coffee, Zap, Users, Heart, Book, TrendingUp, X, Check } from 'lucide-react';
-=======
 import React, { useState } from 'react';
 import { MapPin, Plus, Star, Award, Filter, Search, Coffee, Zap, Users, Heart, Book, TrendingUp, X, Check } from 'lucide-react';
 import RealMap from './components/RealMap';
->>>>>>> main
 
 const App = () => {
   const [view, setView] = useState('map');
