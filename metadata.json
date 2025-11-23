@@ -1,0 +1,7 @@
+{
+  "name": "SpotShare",
+  "description": "A crowdsourced amenities map to find and share restrooms, water fountains, ATMs, and more.",
+  "requestFramePermissions": [
+    "geolocation"
+  ]
+}
