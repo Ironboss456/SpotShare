@@ -116,7 +116,7 @@ const App: React.FC = () => {
   };
 
   return (
-    <div className="relative h-screen w-full bg-slate-100 flex flex-col md:flex-row">
+    <div className="relative h-[100dvh] w-full bg-slate-100 flex flex-col md:flex-row overflow-hidden">
       
       {/* Main Map Area */}
       <div className="flex-1 relative h-full">
@@ -152,7 +152,7 @@ const App: React.FC = () => {
 
         {/* Adding Instruction Banner */}
         {isAdding && !newSpotLocation && (
-          <div className="absolute top-20 left-1/2 -translate-x-1/2 z-[400] bg-slate-900/80 backdrop-blur text-white px-6 py-3 rounded-full shadow-lg animate-in fade-in slide-in-from-top-4">
+          <div className="absolute top-20 left-1/2 -translate-x-1/2 z-[1000] bg-slate-900/80 backdrop-blur text-white px-6 py-3 rounded-full shadow-lg animate-in fade-in slide-in-from-top-4">
             <p className="font-medium text-sm flex items-center gap-2">
               <Navigation className="animate-pulse" size={16} />
               Tap the map to place a pin
@@ -168,7 +168,7 @@ const App: React.FC = () => {
         )}
 
         {/* Bottom Action Bar (Mobile) / Side controls (Desktop) */}
-        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-4 z-[400]">
+        <div className="absolute bottom-8 left-1/2 -translate-x-1/2 flex items-center gap-4 z-[1000]">
           <button
             onClick={handleStartAdd}
             disabled={isAdding || !!newSpotLocation}
