@@ -3,6 +3,7 @@ import { MapContainer, TileLayer, Marker, Popup, useMap, useMapEvents } from 're
 import L from 'leaflet';
 import { Amenity, AmenityType, Coordinates } from '../types';
 import { AmenityIcon } from './Icons';
+import { Trash2 } from 'lucide-react';
 
 // Fix for default Leaflet marker icon not loading in unbundled environment
 const iconMarker2x = 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon-2x.png';
@@ -21,6 +22,7 @@ interface MapUIProps {
   amenities: Amenity[];
   isAdding: boolean;
   onMapClick: (location: Coordinates) => void;
+  onDelete: (id: string) => void;
 }
 
 // Subcomponent to handle map flyTo when user location changes
@@ -83,7 +85,7 @@ const createAmenityIcon = (type: AmenityType) => {
   });
 };
 
-const MapUI: React.FC<MapUIProps> = ({ userLocation, amenities, isAdding, onMapClick }) => {
+const MapUI: React.FC<MapUIProps> = ({ userLocation, amenities, isAdding, onMapClick, onDelete }) => {
   return (
     <MapContainer
       center={[userLocation.lat, userLocation.lng]}
@@ -112,14 +114,28 @@ const MapUI: React.FC<MapUIProps> = ({ userLocation, amenities, isAdding, onMapC
           icon={createAmenityIcon(amenity.type)}
         >
           <Popup>
-            <div className="p-1">
+            <div className="p-1 min-w-[150px]">
               <h3 className="font-bold text-sm flex items-center gap-2">
                  <AmenityIcon type={amenity.type} className="w-4 h-4 text-brand-500" />
                  {amenity.name}
               </h3>
               <p className="text-xs text-slate-600 mt-1">{amenity.description}</p>
-              <div className="text-[10px] text-slate-400 mt-2">
-                Added {new Date(amenity.addedAt).toLocaleDateString()}
+              
+              <div className="flex justify-between items-end mt-3 border-t border-slate-100 pt-2">
+                 <div className="text-[10px] text-slate-400">
+                  Added {new Date(amenity.addedAt).toLocaleDateString()}
+                 </div>
+                 
+                 <button 
+                   onClick={(e) => {
+                     e.stopPropagation();
+                     onDelete(amenity.id);
+                   }}
+                   className="text-red-500 hover:text-red-700 bg-red-50 hover:bg-red-100 p-1.5 rounded-md transition-colors"
+                   title="Delete this spot"
+                 >
+                   <Trash2 size={14} />
+                 </button>
               </div>
             </div>
           </Popup>
