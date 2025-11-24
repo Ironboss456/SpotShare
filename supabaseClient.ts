@@ -15,13 +15,26 @@ if (supabaseUrl && supabaseKey && supabaseUrl.startsWith('http')) {
 } else {
   console.warn("Supabase credentials missing or invalid. App running in offline mode.");
   
+  // mockBuilder allows chaining methods like .select().eq().is() without crashing
+  const mockBuilder = {
+    select: () => mockBuilder,
+    insert: () => mockBuilder,
+    delete: () => mockBuilder,
+    eq: () => mockBuilder,
+    is: () => mockBuilder,
+    then: (resolve: any) => Promise.resolve({ data: [], error: { message: 'Supabase not configured' } }).then(resolve)
+  };
+
   // Return a mock client so the app doesn't crash on load
   client = {
-    from: (table: string) => ({
-      select: () => Promise.resolve({ data: [], error: null }),
-      insert: () => Promise.resolve({ data: null, error: { message: 'Supabase not configured' } }),
-      delete: () => Promise.resolve({ data: null, error: { message: 'Supabase not configured' } }),
-    })
+    auth: {
+      getSession: () => Promise.resolve({ data: { session: null }, error: null }),
+      onAuthStateChange: () => ({ data: { subscription: { unsubscribe: () => {} } } }),
+      signInWithPassword: () => Promise.resolve({ error: { message: 'Supabase credentials missing' } }),
+      signUp: () => Promise.resolve({ error: { message: 'Supabase credentials missing' } }),
+      signOut: () => Promise.resolve({ error: null }),
+    },
+    from: (table: string) => mockBuilder
   };
 }
 

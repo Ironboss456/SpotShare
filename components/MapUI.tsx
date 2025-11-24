@@ -3,7 +3,7 @@ import { MapContainer, TileLayer, Marker, Popup, useMap, useMapEvents } from 're
 import L from 'leaflet';
 import { Amenity, AmenityType, Coordinates } from '../types';
 import { AmenityIcon } from './Icons';
-import { Trash2 } from 'lucide-react';
+import { Trash2, Calendar, Users } from 'lucide-react';
 
 // Fix for default Leaflet marker icon not loading in unbundled environment
 const iconMarker2x = 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon-2x.png';
@@ -25,7 +25,6 @@ interface MapUIProps {
   onDelete: (id: string) => void;
 }
 
-// Subcomponent to handle map flyTo when user location changes
 const MapUpdater: React.FC<{ center: Coordinates }> = ({ center }) => {
   const map = useMap();
   useEffect(() => {
@@ -34,7 +33,6 @@ const MapUpdater: React.FC<{ center: Coordinates }> = ({ center }) => {
   return null;
 };
 
-// Subcomponent to handle map clicks
 const MapClickHandler: React.FC<{ onClick: (coords: Coordinates) => void, isActive: boolean }> = ({ onClick, isActive }) => {
   useMapEvents({
     click(e) {
@@ -46,7 +44,6 @@ const MapClickHandler: React.FC<{ onClick: (coords: Coordinates) => void, isActi
   return null;
 };
 
-// Helper to get SVG string for map markers without using react-dom/server
 const getAmenitySvgPath = (type: AmenityType): string => {
   switch (type) {
     case AmenityType.RESTROOM:
@@ -59,19 +56,22 @@ const getAmenitySvgPath = (type: AmenityType): string => {
       return '<circle cx="5.5" cy="17.5" r="3.5" /><circle cx="18.5" cy="17.5" r="3.5" /><path d="M15 6a1 1 0 1 0 0-2 1 1 0 0 0 0 2zm-3 11.5V14l-3-9 3-2-3-2 3-2h5l3 2-3 2 3 2-3 9v3.5" />';
     case AmenityType.BENCH:
       return '<path d="M15 15v-5l-4-4H7l-4 4v5" /><path d="M4 15h16" /><path d="M6 15v4" /><path d="M18 15v4" />';
+    case AmenityType.EVENT:
+      return '<rect x="3" y="4" width="18" height="18" rx="2" ry="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" />';
     default:
       return '<circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />';
   }
 };
 
-// Helper to create custom div icons for amenities
-const createAmenityIcon = (type: AmenityType) => {
-  // We construct the HTML string manually to avoid needing react-dom/server in the browser environment
+const createAmenityIcon = (type: AmenityType, isEvent: boolean) => {
   const svgPath = getAmenitySvgPath(type);
   const svgString = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5">${svgPath}</svg>`;
   
+  const borderColor = isEvent ? 'border-indigo-500' : 'border-brand-500';
+  const textColor = isEvent ? 'text-indigo-600' : 'text-brand-600';
+
   const iconHtml = `
-    <div class="bg-white p-2 rounded-full shadow-lg border-2 border-brand-500 text-brand-600 flex items-center justify-center">
+    <div class="bg-white p-2 rounded-full shadow-lg border-2 ${borderColor} ${textColor} flex items-center justify-center">
       ${svgString}
     </div>
   `;
@@ -101,24 +101,36 @@ const MapUI: React.FC<MapUIProps> = ({ userLocation, amenities, isAdding, onMapC
       <MapUpdater center={userLocation} />
       <MapClickHandler onClick={onMapClick} isActive={isAdding} />
 
-      {/* User Location Marker */}
       <Marker position={[userLocation.lat, userLocation.lng]}>
         <Popup>You are here</Popup>
       </Marker>
 
-      {/* Amenity Markers */}
       {amenities.map((amenity) => (
         <Marker
           key={amenity.id}
           position={[amenity.location.lat, amenity.location.lng]}
-          icon={createAmenityIcon(amenity.type)}
+          icon={createAmenityIcon(amenity.type, !!amenity.eventDate)}
         >
           <Popup>
-            <div className="p-1 min-w-[150px]">
+            <div className="p-1 min-w-[180px]">
+              {amenity.groupId && (
+                 <div className="inline-flex items-center gap-1 text-[10px] bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded-full mb-2 border border-indigo-100">
+                    <Users size={10} /> Group Exclusive
+                 </div>
+              )}
+
               <h3 className="font-bold text-sm flex items-center gap-2">
-                 <AmenityIcon type={amenity.type} className="w-4 h-4 text-brand-500" />
+                 <AmenityIcon type={amenity.type} className={`w-4 h-4 ${amenity.eventDate ? 'text-indigo-600' : 'text-brand-500'}`} />
                  {amenity.name}
               </h3>
+              
+              {amenity.eventDate && (
+                <div className="mt-1 text-xs font-semibold text-indigo-700 flex items-center gap-1">
+                  <Calendar size={12} />
+                  {new Date(amenity.eventDate).toLocaleString()}
+                </div>
+              )}
+
               <p className="text-xs text-slate-600 mt-1">{amenity.description}</p>
               
               <div className="flex justify-between items-end mt-3 border-t border-slate-100 pt-2">
