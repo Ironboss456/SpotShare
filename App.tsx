@@ -113,6 +113,28 @@ const App: React.FC = () => {
   };
 
   const handleSaveAmenity = async (data: Partial<Amenity>) => {
+    if (!user) return;
+
+    // Check Daily Limit (3 Adds per day)
+    const today = new Date();
+    today.setHours(0, 0, 0, 0); // Start of today
+    
+    const { count, error } = await supabase
+      .from('amenities')
+      .select('*', { count: 'exact', head: true })
+      .eq('creator_id', user.id)
+      .gte('created_at', today.toISOString());
+
+    if (error) {
+      console.error("Error checking limits", error);
+      return;
+    }
+
+    if (count !== null && count >= 3) {
+      alert("Daily Limit Reached! You can only add 3 spots per day.");
+      return;
+    }
+
     // Optimistic UI
     const tempId = Math.random().toString(36).substr(2, 9);
     const newAmenity: Amenity = {
@@ -137,7 +159,7 @@ const App: React.FC = () => {
         longitude: data.location!.lng,
         group_id: data.groupId,
         event_date: data.eventDate,
-        creator_id: user?.id
+        creator_id: user.id
       }]);
       fetchAmenities(); // Refresh to get real ID
     } catch (err) {
@@ -146,8 +168,25 @@ const App: React.FC = () => {
   };
 
   const handleDeleteAmenity = async (id: string) => {
+    if (!user) return;
     if (!window.confirm("Are you sure?")) return;
+
+    // Check Daily Limit (3 Deletes per day) - Using LocalStorage for tracking deletes
+    const todayStr = new Date().toDateString();
+    const storageKey = `deletes_${user.id}_${todayStr}`;
+    const currentDeletes = parseInt(localStorage.getItem(storageKey) || '0');
+
+    if (currentDeletes >= 3) {
+      alert("Daily Limit Reached! You can only delete 3 spots per day.");
+      return;
+    }
+
+    // Proceed with Delete
     setAmenities(prev => prev.filter(a => a.id !== id));
+    
+    // Update Local Storage count
+    localStorage.setItem(storageKey, (currentDeletes + 1).toString());
+
     await supabase.from('amenities').delete().eq('id', id);
   };
 
